@@ -18,6 +18,9 @@
 
 #include "workq.h"
 #include "emq.h"
+#include "emq1.h"
+#include "emq2.h"
+#include "emq3.h"
 
 #define BILLION  1000000000L;
 #define IOGENTHREAD_MAX    16
@@ -100,7 +103,7 @@ int main(int argc, char **argv) {
     getcpu(&cpu, &numa);
     printf("CLI %u %u\n", cpu, numa);
       
-    while((opt = getopt(argc, argv, "hi:c:s:e:t:")) != -1) 
+    while((opt = getopt(argc, argv, "hi:c:s:e:t:a:")) != -1) 
     { 
         switch(opt) 
         { 
@@ -136,11 +139,11 @@ int main(int argc, char **argv) {
                         j++;
                     }
                     if(cwork[i] == '\0'){
-                        printf("pin iogen %d to %s\n", k, work);
+                        printf("pin iogen %2d to %s\n", k, work);
                         g_contexts[k].setaffinity = atoi(work);
                     }
                     if (cwork[i] == ',') {
-                        printf("pin thread %d to %s\n", k, work);
+                        printf("pin iogen %2d to %s\n", k, work);
                         g_contexts[k].setaffinity = atoi(work);
                         k++;
                         if (k >=  IOGENTHREAD_MAX) {
@@ -168,6 +171,39 @@ int main(int argc, char **argv) {
                 total_send = atoi(optarg);
                 printf("toral send %d\n", total_send); 
                 break; 
+
+        case 'a':                    //algorithym
+                i= atoi(optarg);
+                switch (i) {
+                case 0: //emq spinlock not aligned
+                    g_emqx.emq_init = emq_init;
+                    g_emqx.emq_write= emq_write;
+                    g_emqx.emq_read = emq_read;
+                    printf("spinlock not aligned\n");
+                    break;
+
+
+                case 1: //emq spinlock aligned
+                    g_emqx.emq_init = emq1_init;
+                    g_emqx.emq_write= emq1_write;
+                    g_emqx.emq_read = emq1_read;
+                    printf("spinlock aligned\n");
+                    break;
+
+                case 2: //emq spinlock aligned only
+                    g_emqx.emq_init = emq2_init;
+                    g_emqx.emq_write= emq2_write;
+                    g_emqx.emq_read = emq2_read;
+                    printf("spinlock aligned only\n");
+                    break;
+
+                default:
+                    break;
+
+                }
+                printf("toral send %d\n", total_send);
+                break; 
+
   
         default:
             usage();
@@ -277,7 +313,7 @@ return EXIT_SUCCESS;    printf("time  %lf %lf\n", accum1, accum );
 }
 
 void usage(){
-    printf("-h     help\n-i     io_gen_threads 1-32\n-c      io_gen cpus x,y,z\n-s    cli_cpu\n-e   emulator cpu\n-t    total em msgs\n");
+    printf("-h     help\n-i     io_gen_threads 1-32\n-c      io_gen cpus x,y,z\n-s    cli_cpu\n-e   emulator cpu\n-t    total em msgs\n-a queu type\n");
 }
 
 
