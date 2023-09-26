@@ -13,9 +13,7 @@
 
 typedef struct msg_s {
     int cmd;
-    int hops;
-    //clock_t start;
-    struct timespec start;
+    int src;
     int length;
     int data[256];
 } msg_t;

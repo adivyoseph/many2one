@@ -36,12 +36,14 @@ void *th_func(void *p_arg);
 void *th_em(void *p_arg);
 
 
-//control message
-typedef struct ctrlReq_s {
-    int cmd;
-} ctrlReq_t;
 
+#define CMD_START 1
+#define CMD_STOP    2
+#define CMD_CLEAR  3
+#define RSP_READY     1
+#define RSP_DONE     2
 
+workq_t g_workq_cli;
 /**
  * 
  * 
@@ -64,7 +66,7 @@ int main(int argc, char **argv) {
     char cwork[64];
     cpu_set_t my_set;        /* Define your cpu_set bit mask. */
 
-//    msg_t msg;
+    msg_t msg;
 
 
     for (i = 0; i <= IOGENTHREAD_MAX ; i++) {
@@ -157,6 +159,9 @@ int main(int argc, char **argv) {
     printf("CLI %u %u\n", cpu, numa);
 
 
+
+    workq_init(&g_workq_cli, 16, "cli");
+
     for (i = 0; i <= IOGENTHREAD_MAX; i++) {
         sprintf(&work[0], "wq%d", i);
         workq_init(&g_contexts[i].workq_in, 16, &work[0]);
@@ -170,6 +175,21 @@ int main(int argc, char **argv) {
 
     g_contexts[IOGENTHREAD_MAX].id = IOGENTHREAD_MAX;
      pthread_create(&g_contexts[IOGENTHREAD_MAX].thread_id, NULL, th_em, (void *) &g_contexts[IOGENTHREAD_MAX]);
+
+     i = 0;
+     while (1) {
+            if(workq_read(&g_workq_cli, &msg)){
+                if(msg.cmd == RSP_READY) {
+                    i++;
+                }
+             if (i == ioGenThreads) {
+                 break;
+             }
+         }
+     }
+
+     printf("all threads ready\n");
+
 
     while (1) {
     }
@@ -199,6 +219,8 @@ void *th_func(void *p_arg){
     ioGenThreadContext_t *this = (ioGenThreadContext_t *) p_arg;
     //unsigned cpu, numa;
     cpu_set_t my_set;        /* Define your cpu_set bit mask. */
+     msg_t msg;
+     int send_cnt = 0;
 
     printf("Thread_%d PID %d %d\n", this->id, getpid(), gettid());
 
@@ -209,8 +231,39 @@ void *th_func(void *p_arg){
         sched_setaffinity(0, sizeof(cpu_set_t), &my_set);
     }
 
+    msg.cmd = RSP_READY;
+    msg.src = this->id;
+    msg.length = 0;
+    if(workq_write(&g_workq_cli, &msg)){
+        printf("%d q is full\n", this->id);
+    }
 
     while (1){
+        if(workq_read(&this->workq_in, &msg)){
+            switch (msg.cmd) {
+            case CMD_START:
+                //clear stats
+                send_cnt = msg.length;
+                break;
+
+            default:
+                break;
+            }
+            if (send_cnt) {
+                //send a work item
+
+
+                send_cnt--;
+                if (send_cnt == 0) {
+                    msg.cmd = RSP_DONE;
+                    msg.src = this->id;
+                    msg.length = 0;
+                    if(workq_write(&g_workq_cli, &msg)){
+                        printf("%d q is full\n", this->id);
+                    }
+                }
+            }
+        }
     }
 }
 
