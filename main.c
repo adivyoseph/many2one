@@ -77,6 +77,12 @@ int main(int argc, char **argv) {
     cpu_set_t my_set;        /* Define your cpu_set bit mask. */
 
     msg_t msg;
+    int total_sent = 0;
+    struct timespec start;
+    struct timespec end;
+    int total_send = 1000000;
+    int msgsPerIOGen = 0;
+    int first_count = 0;
 
 
     for (i = 0; i <= IOGENTHREAD_MAX ; i++) {
@@ -92,7 +98,7 @@ int main(int argc, char **argv) {
     getcpu(&cpu, &numa);
     printf("CLI %u %u\n", cpu, numa);
       
-    while((opt = getopt(argc, argv, "ht:c:s:e:")) != -1) 
+    while((opt = getopt(argc, argv, "hi:c:s:e:t:")) != -1) 
     { 
         switch(opt) 
         { 
@@ -101,7 +107,7 @@ int main(int argc, char **argv) {
             return 0;
             break;
 
-        case 't':                //threads for iogen
+        case 'i':                //threads for iogen
                 ioGenThreads = atoi(optarg);
                 if (ioGenThreads >  IOGENTHREAD_MAX) {
                     ioGenThreads  =  IOGENTHREAD_MAX;
@@ -154,6 +160,12 @@ int main(int argc, char **argv) {
                g_contexts[IOGENTHREAD_MAX].setaffinity = atoi(optarg);
                 printf("emulator cpu %d\n", g_contexts[IOGENTHREAD_MAX].setaffinity); 
                 break; 
+
+
+        case 't':                    //total send
+                total_send = atoi(optarg);
+                printf("toral send %d\n", total_send); 
+                break; 
   
         default:
             usage();
@@ -202,8 +214,9 @@ int main(int argc, char **argv) {
             if(workq_read(&g_workq_cli, &msg)){
                 if(msg.cmd == RSP_READY) {
                     i++;
+                    printf("thread %d ready\n", msg.src);
                 }
-             if (i == ioGenThreads) {
+             if (i == ( ioGenThreads + 1)) {
                  break;
              }
          }
@@ -211,17 +224,56 @@ int main(int argc, char **argv) {
 
      printf("all threads ready\n");
 
+     if (ioGenThreads == 1) {
+          first_count = total_send;
+     }
+     else {
+         msgsPerIOGen = (int)(total_send / ioGenThreads);
+         first_count = total_send - (msgsPerIOGen* (ioGenThreads-1));
+     }
+     //start run
+     msg.cmd = CMD_START;
+     clock_gettime(CLOCK_REALTIME, &start);
+      for (i = 0;  i < ioGenThreads; i++) {
+          if (i == 0) {
+              msg.length = first_count;
+          }
+          else {
+              msg.length = msgsPerIOGen;
+          }
+           if(workq_write(&g_contexts[i].workq_in, &msg)){
+               printf("%d q is full\n", i);
+              }
+              else{
+               total_sent += msg.length;
+              }
+          }
+   
 
+    i = 0;
     while (1) {
+
+        if(workq_read(&g_workq_cli, &msg)){
+            if(msg.cmd == RSP_DONE) {
+                i++;
+                printf("thread %d done\n", msg.src);
+            }
+            if (i == ( ioGenThreads )) {
+             break;
+           }
+        }
     }
 
+    clock_gettime(CLOCK_REALTIME, &end);
+    printf("finished total sent %d\n", total_sent);
+    printf("time  %lu nano seconds\n", (end.tv_nsec - start.tv_nsec ) );
 
 
     return 0;
 }
 
 void usage(){
-    printf("-h     help\n-t     io_gen_threads 1-32\n-c      io_gen cpus x,y,z\n-s    cli_cpu\n-e   emulator cpu\n");
+    printf("-h     help\n-i     io_gen_threads 1-32\n-c      io_gen cpus x,y,z\n-s    cli_cpu\n-e   emulator cpu\n-t    total em msgs\n");
 }
 
 
@@ -268,6 +320,7 @@ void *th_func(void *p_arg){
             case CMD_START:
                 //clear stats
                 send_cnt = msg.length;
+                printf("io_gen_%d started %d\n", this->id, send_cnt );
                 break;
 
             default:
@@ -283,7 +336,7 @@ void *th_func(void *p_arg){
             }
         }
 
-        if (send_cnt && (emOutstandingRequests < IOGEN_EM_REQ_MAX)) {
+        if ((send_cnt > 0)&& (emOutstandingRequests < IOGEN_EM_REQ_MAX)) {
              //send a work item
             emq_msg.src = this->id;
             emq_msg.seq = send_cnt;
@@ -298,6 +351,7 @@ void *th_func(void *p_arg){
                    msg.length = 0;
                    if(workq_write(&g_workq_cli, &msg)){
                        printf("%d q is full\n", this->id);
+                       exit(10);
                     }
                 }     
             }
@@ -337,12 +391,18 @@ void *th_em(void *p_arg){
         sched_setaffinity(0, sizeof(cpu_set_t), &my_set);
     }
 
+    msg.cmd = RSP_READY;
+    msg.src = 16;
+    msg.length = 0;
+    if(workq_write(&g_workq_cli, &msg)){
+        printf("%d q is full\n", this->id);
+    }
 
     while (1){
 //            if(workq_read(&this->workq_in, &msg)){
 //           }
         g_emqx.emq_read(&emq_msg);
-        if (emq_msg.length ) {
+        if (emq_msg.length > 0 ) {
             //do something
 
 
