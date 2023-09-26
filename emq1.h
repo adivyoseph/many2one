@@ -1,5 +1,5 @@
-#ifndef __WORKQ_H__
-#define __WORKQ_H__
+#ifndef __EMQ_H__
+#define __EMQ_H__
 
 
 
@@ -8,16 +8,16 @@
 #define CACHELINE_SIZE 64
 #endif
 
-#define FIFO_DEPTH_MAX 0x1f
+#define FIFO_DEPTH_MAX 0x80     //8*16
 
 
-typedef struct msg_s {
+typedef struct emq_msg_s {
     int cmd;
     int src;
     int seqNum;
     int length;
     int data[256];
-} msg_t;
+} emq_msg_t;
 
 
 typedef struct {
@@ -32,7 +32,7 @@ typedef struct {
     int read_cnt;
     char name[32];
 
-} workq_t __attribute__ ((aligned(CACHELINE_SIZE)));
+} emq_t __attribute__ ((aligned(CACHELINE_SIZE)));
 
 
 

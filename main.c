@@ -17,19 +17,26 @@
 #include <sys/syscall.h>
 
 #include "workq.h"
+#include "emq.h"
 
 #define IOGENTHREAD_MAX    16
 typedef struct ioGenThreadContext_s {
     pthread_t   thread_id;
     int setaffinity;
     workq_t workq_in;
+    workq_t workq_ack;
     int id;
 } ioGenThreadContext_t;
 
 ioGenThreadContext_t   g_contexts[IOGENTHREAD_MAX + 1];
 
+typedef struct {
+    void (*emq_init)(void);
+    void (*emq_write)(emq_msg_t *p_msg);
+    void (*emq_read)(emq_msg_t *p_msg);
+} sharedq_t;
 
-
+sharedq_t g_emqx;
 
 void usage();
 void *th_func(void *p_arg);
@@ -42,6 +49,9 @@ void *th_em(void *p_arg);
 #define CMD_CLEAR  3
 #define RSP_READY     1
 #define RSP_DONE     2
+
+#define EM_RSP_ACK     1
+#define IOGEN_EM_REQ_MAX 8
 
 workq_t g_workq_cli;
 /**
@@ -72,6 +82,12 @@ int main(int argc, char **argv) {
     for (i = 0; i <= IOGENTHREAD_MAX ; i++) {
         g_contexts[i].setaffinity = -1;
     }
+
+    //emq set default
+    g_emqx.emq_init = emq_init;
+    g_emqx.emq_write= emq_write;
+    g_emqx.emq_read = emq_read;
+
 
     getcpu(&cpu, &numa);
     printf("CLI %u %u\n", cpu, numa);
@@ -149,6 +165,8 @@ int main(int argc, char **argv) {
 
     printf("\n");
 
+    g_emqx.emq_init();
+
     CPU_ZERO(&my_set); 
     if (setaffinity >= 0) {
         CPU_SET(setaffinity, &my_set);
@@ -165,6 +183,9 @@ int main(int argc, char **argv) {
     for (i = 0; i <= IOGENTHREAD_MAX; i++) {
         sprintf(&work[0], "wq%d", i);
         workq_init(&g_contexts[i].workq_in, 16, &work[0]);
+
+        sprintf(&work[0], "wq_ack%d", i);
+        workq_init(&g_contexts[i].workq_ack, 16, &work[0]);
     }
 
 //    signal(SIGCLD, SIG_IGN);
@@ -220,7 +241,9 @@ void *th_func(void *p_arg){
     //unsigned cpu, numa;
     cpu_set_t my_set;        /* Define your cpu_set bit mask. */
      msg_t msg;
+     emq_msg_t emq_msg;
      int send_cnt = 0;
+     int emOutstandingRequests = 0;
 
     printf("Thread_%d PID %d %d\n", this->id, getpid(), gettid());
 
@@ -239,6 +262,7 @@ void *th_func(void *p_arg){
     }
 
     while (1){
+        //look for CLI command request
         if(workq_read(&this->workq_in, &msg)){
             switch (msg.cmd) {
             case CMD_START:
@@ -249,19 +273,33 @@ void *th_func(void *p_arg){
             default:
                 break;
             }
-            if (send_cnt) {
-                //send a work item
+        }
+        //track emulator ack window to meter new requests
+        if(workq_read(&this->workq_ack, &msg)){
+            if (msg.cmd == EM_RSP_ACK) {
+                if (emOutstandingRequests) {
+                    emOutstandingRequests --;
+                }
+            }
+        }
 
-
+        if (send_cnt && (emOutstandingRequests < IOGEN_EM_REQ_MAX)) {
+             //send a work item
+            emq_msg.src = this->id;
+            emq_msg.seq = send_cnt;
+            emq_msg.length = 1;
+            g_emqx.emq_write(&emq_msg);
+            if (emq_msg.length ) {
+                emOutstandingRequests++;
                 send_cnt--;
                 if (send_cnt == 0) {
-                    msg.cmd = RSP_DONE;
-                    msg.src = this->id;
-                    msg.length = 0;
-                    if(workq_write(&g_workq_cli, &msg)){
-                        printf("%d q is full\n", this->id);
+                   msg.cmd = RSP_DONE;
+                   msg.src = this->id;
+                   msg.length = 0;
+                   if(workq_write(&g_workq_cli, &msg)){
+                       printf("%d q is full\n", this->id);
                     }
-                }
+                }     
             }
         }
     }
@@ -283,9 +321,15 @@ void *th_em(void *p_arg){
     //unsigned cpu, numa;
     cpu_set_t my_set;        /* Define your cpu_set bit mask. */
     msg_t msg;
+    emq_msg_t emq_msg;
+    workq_t *p_workqs[IOGENTHREAD_MAX];
+    int i;
 
     printf("Emulator  PID %d %d\n", getpid(), gettid());
-
+    //build local completion queue look table
+    for (i = 0; i < IOGENTHREAD_MAX; i++) {
+        p_workqs[i] = &g_contexts[i].workq_ack;
+    }
 
     CPU_ZERO(&my_set); 
     if (this->setaffinity >= 0) {
@@ -295,8 +339,25 @@ void *th_em(void *p_arg){
 
 
     while (1){
-            if(workq_read(&this->workq_in, &msg)){
+//            if(workq_read(&this->workq_in, &msg)){
+//           }
+        g_emqx.emq_read(&emq_msg);
+        if (emq_msg.length ) {
+            //do something
+
+
+            //ack
+            if(p_workqs[emq_msg.src] ){
+                msg.cmd = EM_RSP_ACK;
+                msg.src = 16;
+                msg.length = emq_msg.length;
+                if(workq_write(p_workqs[emq_msg.src] , &msg)){
+                    printf("em to ack %d  is full\n", emq_msg.src);
+                 }
             }
+
+        
+        }
     }
 }
 
