@@ -19,6 +19,7 @@
 #include "workq.h"
 #include "emq.h"
 
+#define BILLION  1000000000L;
 #define IOGENTHREAD_MAX    16
 typedef struct ioGenThreadContext_s {
     pthread_t   thread_id;
@@ -80,6 +81,7 @@ int main(int argc, char **argv) {
     int total_sent = 0;
     struct timespec start;
     struct timespec end;
+    double accum, accum1;
     int total_send = 1000000;
     int msgsPerIOGen = 0;
     int first_count = 0;
@@ -256,7 +258,7 @@ int main(int argc, char **argv) {
         if(workq_read(&g_workq_cli, &msg)){
             if(msg.cmd == RSP_DONE) {
                 i++;
-                printf("thread %d done\n", msg.src);
+                //printf("thread %d done\n", msg.src);
             }
             if (i == ( ioGenThreads )) {
              break;
@@ -266,7 +268,9 @@ int main(int argc, char **argv) {
 
     clock_gettime(CLOCK_REALTIME, &end);
     printf("finished total sent %d\n", total_sent);
-    printf("time  %lu nano seconds\n", (end.tv_nsec - start.tv_nsec ) );
+accum = ( end.tv_sec - start.tv_sec ) + (double)( end.tv_nsec - start.tv_nsec ) / (double)BILLION;
+printf( "%lf\n", accum );
+return EXIT_SUCCESS;    printf("time  %lf %lf\n", accum1, accum );
 
 
     return 0;
@@ -297,7 +301,7 @@ void *th_func(void *p_arg){
      int send_cnt = 0;
      int emOutstandingRequests = 0;
 
-    printf("Thread_%d PID %d %d\n", this->id, getpid(), gettid());
+    //printf("Thread_%d PID %d %d\n", this->id, getpid(), gettid());
 
 
     CPU_ZERO(&my_set); 
@@ -320,7 +324,7 @@ void *th_func(void *p_arg){
             case CMD_START:
                 //clear stats
                 send_cnt = msg.length;
-                printf("io_gen_%d started %d\n", this->id, send_cnt );
+                //printf("io_gen_%d started %d\n", this->id, send_cnt );
                 break;
 
             default:
@@ -379,7 +383,7 @@ void *th_em(void *p_arg){
     workq_t *p_workqs[IOGENTHREAD_MAX];
     int i;
 
-    printf("Emulator  PID %d %d\n", getpid(), gettid());
+    //printf("Emulator  PID %d %d\n", getpid(), gettid());
     //build local completion queue look table
     for (i = 0; i < IOGENTHREAD_MAX; i++) {
         p_workqs[i] = &g_contexts[i].workq_ack;
