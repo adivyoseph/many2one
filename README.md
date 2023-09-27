@@ -16,6 +16,12 @@ Usage
 
 -a queue type
 
-0 default, spinlocj not aligned
+0 default, spinlock not aligned
 
 1 spinlock aligned
+
+2 spinlock only akigned
+
+3 mutex not aligned
+
+4 mutex aligned

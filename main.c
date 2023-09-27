@@ -21,9 +21,11 @@
 #include "emq1.h"
 #include "emq2.h"
 #include "emq3.h"
+#include "emq4.h"
 
 #define BILLION  1000000000L;
-#define IOGENTHREAD_MAX    16
+#define IOGENTHREAD_MAX    2//16
+
 typedef struct ioGenThreadContext_s {
     pthread_t   thread_id;
     int setaffinity;
@@ -195,6 +197,22 @@ int main(int argc, char **argv) {
                     g_emqx.emq_write= emq2_write;
                     g_emqx.emq_read = emq2_read;
                     printf("spinlock aligned only\n");
+                    break;
+
+
+                case 3: //emq mutex not aligned
+                    g_emqx.emq_init = emq3_init;
+                    g_emqx.emq_write= emq3_write;
+                    g_emqx.emq_read = emq3_read;
+                    printf("mutex not aligned\n");
+                    break;
+
+
+                case 4: //emq mutex aligned only
+                    g_emqx.emq_init = emq4_init;
+                    g_emqx.emq_write= emq4_write;
+                    g_emqx.emq_read = emq4_read;
+                    printf("mutex aligned only\n");
                     break;
 
                 default:
