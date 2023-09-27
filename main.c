@@ -245,14 +245,11 @@ int main(int argc, char **argv) {
 
 
 
-    workq_init(&g_workq_cli, 16, "cli");
+    workq_init(&g_workq_cli);
 
     for (i = 0; i <= IOGENTHREAD_MAX; i++) {
-        sprintf(&work[0], "wq%d", i);
-        workq_init(&g_contexts[i].workq_in, 16, &work[0]);
-
-        sprintf(&work[0], "wq_ack%d", i);
-        workq_init(&g_contexts[i].workq_ack, 16, &work[0]);
+        workq_init(&g_contexts[i].workq_in);
+        workq_init(&g_contexts[i].workq_ack);
     }
 
 //    signal(SIGCLD, SIG_IGN);
@@ -369,21 +366,19 @@ void *th_func(void *p_arg){
     if(workq_write(&g_workq_cli, &msg)){
         printf("%d q is full\n", this->id);
     }
-
+    //wait for start command
     while (1){
         //look for CLI command request
         if(workq_read(&this->workq_in, &msg)){
-            switch (msg.cmd) {
-            case CMD_START:
+            if (msg.cmd == CMD_START) {
                 //clear stats
                 send_cnt = msg.length;
                 //printf("io_gen_%d started %d\n", this->id, send_cnt );
                 break;
-
-            default:
-                break;
             }
         }
+    }
+     while (1){
         //track emulator ack window to meter new requests
         if(workq_read(&this->workq_ack, &msg)){
             if (msg.cmd == EM_RSP_ACK) {
@@ -471,7 +466,7 @@ void *th_em(void *p_arg){
                 msg.src = this->id;
                 msg.length = emq_msg.length;
                 if(workq_write( p_workq_ack , &msg)){
-                    printf("em to ack %s  is full\n",  p_workq_ack->name);
+                    printf("em to ack   is full\n");
                  }
             }
 
