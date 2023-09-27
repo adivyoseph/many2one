@@ -51,6 +51,6 @@ finished total sent 1000000
 
 ## Screen shot
 
-![](file:// 2023-09-26 21-31-45.png)
+![](file:// 2023-09-26-21-31-45.png)
 
-<img src="file://2023-09-26 21-31-45.png" alt="alt text" width="200"/>
+<img src="file://2023-09-26-21-31-45.png" alt="screen shott" width="200"/>
