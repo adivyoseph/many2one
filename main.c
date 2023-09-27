@@ -171,7 +171,7 @@ int main(int argc, char **argv) {
 
         case 't':                    //total send
                 total_send = atoi(optarg);
-                printf("toral send %d\n", total_send); 
+                printf("total send %d\n", total_send); 
                 break; 
 
         case 'a':                    //algorithym
@@ -219,7 +219,6 @@ int main(int argc, char **argv) {
                     break;
 
                 }
-                printf("toral send %d\n", total_send);
                 break; 
 
   
