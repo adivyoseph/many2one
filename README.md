@@ -50,4 +50,5 @@ finished total sent 1000000
 ```
 
 ## Screen shot
-![screen shot](/"Screenshot from 2023-09-26 21-31-45.png")
+
+![]("Screenshot from 2023-09-26 21-31-45.png")
