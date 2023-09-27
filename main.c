@@ -24,7 +24,7 @@
 #include "emq4.h"
 
 #define BILLION  1000000000L;
-#define IOGENTHREAD_MAX    2//16
+#define IOGENTHREAD_MAX    16
 
 typedef struct ioGenThreadContext_s {
     pthread_t   thread_id;
@@ -271,7 +271,7 @@ int main(int argc, char **argv) {
                     i++;
                     printf("thread %d ready\n", msg.src);
                 }
-             if (i == ( ioGenThreads + 1)) {
+             if (i > IOGENTHREAD_MAX) {
                  break;
              }
          }
@@ -434,6 +434,7 @@ void *th_em(void *p_arg){
     msg_t msg;
     emq_msg_t emq_msg;
     workq_t *p_workqs[IOGENTHREAD_MAX];
+     workq_t *p_workq_ack;
     int i;
 
     //printf("Emulator  PID %d %d\n", getpid(), gettid());
@@ -464,12 +465,13 @@ void *th_em(void *p_arg){
 
 
             //ack
-            if(p_workqs[emq_msg.src] ){
+            p_workq_ack = p_workqs[emq_msg.src];
+           if( p_workq_ack != NULL){
                 msg.cmd = EM_RSP_ACK;
-                msg.src = 16;
+                msg.src = this->id;
                 msg.length = emq_msg.length;
-                if(workq_write(p_workqs[emq_msg.src] , &msg)){
-                    printf("em to ack %d  is full\n", emq_msg.src);
+                if(workq_write( p_workq_ack , &msg)){
+                    printf("em to ack %s  is full\n",  p_workq_ack->name);
                  }
             }
 
